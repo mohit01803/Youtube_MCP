@@ -20,14 +20,14 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('mcp_server.log'),
-        logging.StreamHandler(sys.stderr)
-    ]
-)
+# logging.basicConfig(
+#    level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.FileHandler('mcp_server.log'),
+#         logging.StreamHandler(sys.stderr)
+#     ]
+# )
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("yt_enhanced")
