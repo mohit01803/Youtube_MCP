@@ -1,0 +1,9 @@
+2025-10-10 06:10:22,548 - __main__ - INFO - ============================================================
+2025-10-10 06:10:22,548 - __main__ - INFO - Enhanced YouTube MCP Server Starting...
+2025-10-10 06:10:22,548 - __main__ - INFO - ============================================================
+2025-10-10 06:10:22,556 - __main__ - INFO - Using YouTube API key from YOUTUBE_API_KEY environment variable
+2025-10-10 06:10:22,556 - __main__ - INFO - API Key configured: Yes
+2025-10-10 06:10:22,556 - __main__ - INFO - Starting YouTube MCP Streamable HTTP server at http://127.0.0.1:8000/mcp
+2025-10-10 06:10:22,556 - __main__ - INFO - Available tools: fetch_comments, get_channel_videos, search_videos, get_trending_videos, get_video_details
+2025-10-10 06:10:22,612 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-10-10 06:10:42,645 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
