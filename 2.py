@@ -487,13 +487,15 @@ if __name__ == "__main__":
         logger.error(f"Failed to get YouTube API key: {e}")
         sys.exit(1)
 
-    logger.info("Starting YouTube MCP Streamable HTTP server at http://127.0.0.1:8000/mcp")
-    logger.info("Available tools: fetch_comments, get_channel_videos, search_videos, get_trending_videos, get_video_details")
-    
+   # ✅ Bind to all interfaces and to the platform-provided port
+    host = "0.0.0.0"
+    port = int(os.getenv("PORT", "8080"))  # FastMCP sets PORT for you
+
+    logger.info(f"Starting YouTube MCP server at http://{host}:{port}/mcp")
     # One endpoint `/mcp` that supports POST (and can stream responses).
     mcp.run(
         "http",               # Streamable HTTP transport (same as Facebook server)
-        host="127.0.0.1",
-        port=8000,
+        host=host,
+        port=port,
         path="/mcp"
     )
