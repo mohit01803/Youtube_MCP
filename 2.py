@@ -30,7 +30,7 @@ from datetime import datetime
 # )
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("yt_enhanced")
+mcp = FastMCP("youtubemcp")
 
 load_dotenv()
 YT_API_KEY = None
@@ -496,6 +496,6 @@ if __name__ == "__main__":
     mcp.run(
         "http",               # Streamable HTTP transport (same as Facebook server)
         host=host,
-        port=port,
+        port=8000,
         path="/mcp"
     )
