@@ -489,7 +489,7 @@ if __name__ == "__main__":
 
    # ✅ Bind to all interfaces and to the platform-provided port
     host = "0.0.0.0"
-    port = int(os.getenv("PORT", "8080"))  # FastMCP sets PORT for you
+    port = int(os.getenv("PORT", "8000"))  # FastMCP sets PORT for you
 
     logger.info(f"Starting YouTube MCP server at http://{host}:{port}/mcp")
     # One endpoint `/mcp` that supports POST (and can stream responses).
