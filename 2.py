@@ -171,6 +171,23 @@ def _pack_video(item: Dict[str, Any]) -> Dict[str, Any]:
         "tags": snippet.get("tags", [])
     }
 
+def _pack_artist(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Pack artist data"""
+    snippet = item.get("snippet", {})
+    statistics = item.get("statistics", {})
+    
+    return {
+        "channelId": item.get("id"),
+        "title": snippet.get("title"),
+        "description": snippet.get("description", "")[:200],
+        "thumbnails": snippet.get("thumbnails", {}),
+        "subscriberCount": int(statistics.get("subscriberCount", 0)),
+        "videoCount": int(statistics.get("videoCount", 0)),
+        "viewCount": int(statistics.get("viewCount", 0)),
+        "country": snippet.get("country"),
+        "publishedAt": snippet.get("publishedAt")
+    }
+
 @mcp.tool()
 async def fetch_comments(videoUrl: str, order: str = "relevance", max: int = 300) -> str:
     """
@@ -235,7 +252,7 @@ async def fetch_comments(videoUrl: str, order: str = "relevance", max: int = 300
         return f"ERROR: {type(e).__name__}: {e}"
 
 @mcp.tool()
-async def get_channel_videos(channelInput: str, order: str = "viewCount", max: int = 50) -> str:
+async def get_channel_videos(channelInput: str, order: str = "viewCount", max: int = 500) -> str:
     """
     Get videos from a YouTube channel.
     Args:
@@ -340,7 +357,7 @@ async def get_channel_videos(channelInput: str, order: str = "viewCount", max: i
         return f"ERROR: {type(e).__name__}: {e}"
 
 @mcp.tool()
-async def search_videos(query: str, order: str = "viewCount", max: int = 20) -> str:
+async def search_videos(query: str, order: str = "viewCount", max: int = 200) -> str:
     """
     Search for YouTube videos.
     Args:
@@ -393,7 +410,7 @@ async def search_videos(query: str, order: str = "viewCount", max: int = 20) -> 
         return f"ERROR: {type(e).__name__}: {e}"
 
 @mcp.tool()
-async def get_trending_videos(region: str = "IN", category: str = "0", max: int = 20) -> str:
+async def get_trending_videos(region: str = "IN", category: str = "0", max: int = 200) -> str:
     """
     Get trending videos on YouTube.
     Args:
@@ -470,6 +487,285 @@ async def get_video_details(videoUrl: str) -> str:
             logger.info(f"Successfully fetched video details for: {video['title']}")
             
             return json.dumps(video, ensure_ascii=False)
+            
+    except Exception as e:
+        logger.error(f"Error: {e}", exc_info=True)
+        return f"ERROR: {type(e).__name__}: {e}"
+
+@mcp.tool()
+async def get_trending_playlists(region: str = "IN", max: int = 200) -> str:
+    """
+    Get popular and trending playlists on YouTube.
+    Args:
+      region: Country code (IN=India, US=United States, GB=United Kingdom, etc.)
+      max: Max results to return (1-50)
+    """
+    logger.info(f"get_trending_playlists called - Region: {region}, max: {max}")
+    
+    try:
+        _get_yt_api_key()
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Search for trending playlists
+            search_data = await _yt_get(client, "search", {
+                "part": "snippet",
+                "type": "playlist",
+                "maxResults": max,
+                "regionCode": region.upper(),
+                "order": "viewCount",  # Sort by most viewed
+            })
+            
+            playlists = []
+            playlist_ids = [item["id"]["playlistId"] for item in search_data.get("items", [])]
+            
+            if playlist_ids:
+                # Get detailed playlist information
+                playlist_data = await _yt_get(client, "playlists", {
+                    "part": "snippet,contentDetails",
+                    "id": ",".join(playlist_ids)
+                })
+                
+                for playlist in playlist_data.get("items", []):
+                    playlists.append({
+                        "playlistId": playlist["id"],
+                        "title": playlist["snippet"]["title"],
+                        "description": playlist["snippet"]["description"][:200],
+                        "channelTitle": playlist["snippet"]["channelTitle"],
+                        "channelId": playlist["snippet"]["channelId"],
+                        "thumbnails": playlist["snippet"]["thumbnails"],
+                        "videoCount": playlist["contentDetails"]["itemCount"],
+                        "publishedAt": playlist["snippet"]["publishedAt"]
+                    })
+            
+            logger.info(f"Successfully fetched {len(playlists)} trending playlists")
+            
+            return json.dumps({
+                "region": region,
+                "total_returned": len(playlists),
+                "playlists": playlists
+            }, ensure_ascii=False)
+            
+    except Exception as e:
+        logger.error(f"Error: {e}", exc_info=True)
+        return f"ERROR: {type(e).__name__}: {e}"
+
+@mcp.tool()
+async def get_playlist_artists(playlistUrl: str, max: int = 200) -> str:
+    """
+    Get details of artists featured in a YouTube playlist.
+    Args:
+      playlistUrl: Full YouTube playlist URL or playlist ID
+      max: Max artists to return (1-50)
+    """
+    logger.info(f"get_playlist_artists called - URL: {playlistUrl}, max: {max}")
+    
+    try:
+        _get_yt_api_key()
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+    
+    try:
+        # Extract playlist ID from URL
+        playlist_id = playlistUrl
+        if "youtube.com" in playlistUrl:
+            parsed = urlparse(playlistUrl)
+            qs = parse_qs(parsed.query)
+            if "list" in qs:
+                playlist_id = qs["list"][0]
+        
+        async with httpx.AsyncClient() as client:
+            # Get playlist items
+            playlist_data = await _yt_get(client, "playlistItems", {
+                "part": "snippet",
+                "playlistId": playlist_id,
+                "maxResults": max
+            })
+            
+            # Extract unique channel IDs from playlist items
+            channel_ids = set()
+            for item in playlist_data.get("items", []):
+                channel_id = item.get("snippet", {}).get("videoOwnerChannelId")
+                if channel_id:
+                    channel_ids.add(channel_id)
+            
+            # Get detailed channel/artist information
+            artists = []
+            if channel_ids:
+                channels_data = await _yt_get(client, "channels", {
+                    "part": "snippet,statistics",
+                    "id": ",".join(channel_ids)
+                })
+                
+                artists = [_pack_artist(channel) for channel in channels_data.get("items", [])]
+                
+                # Sort by subscriber count
+                artists.sort(key=lambda x: x["subscriberCount"], reverse=True)
+            
+            logger.info(f"Successfully fetched {len(artists)} artists from playlist")
+            
+            return json.dumps({
+                "playlistId": playlist_id,
+                "total_returned": len(artists),
+                "artists": artists
+            }, ensure_ascii=False)
+            
+    except Exception as e:
+        logger.error(f"Error: {e}", exc_info=True)
+        return f"ERROR: {type(e).__name__}: {e}"
+
+@mcp.tool()
+async def get_playlist_details(playlistUrl: str, max_videos: int = 500) -> str:
+    """
+    Get detailed information about a playlist and its videos.
+    Args:
+      playlistUrl: Full YouTube playlist URL or playlist ID
+      max_videos: Maximum number of videos to return from playlist (1-50)
+    """
+    logger.info(f"get_playlist_details called - URL: {playlistUrl}, max_videos: {max_videos}")
+    
+    try:
+        _get_yt_api_key()
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+    
+    try:
+        # Extract playlist ID from URL
+        playlist_id = playlistUrl
+        if "youtube.com" in playlistUrl:
+            parsed = urlparse(playlistUrl)
+            qs = parse_qs(parsed.query)
+            if "list" in qs:
+                playlist_id = qs["list"][0]
+        
+        async with httpx.AsyncClient() as client:
+            # Get playlist details
+            playlist_data = await _yt_get(client, "playlists", {
+                "part": "snippet,contentDetails,status",
+                "id": playlist_id
+            })
+            
+            if not playlist_data.get("items"):
+                return "ERROR: Playlist not found"
+            
+            playlist_info = playlist_data["items"][0]
+            
+            # Get playlist items (videos)
+            videos = []
+            page_token = None
+            
+            while len(videos) < max_videos:
+                params = {
+                    "part": "snippet,contentDetails",
+                    "playlistId": playlist_id,
+                    "maxResults": min(50, max_videos - len(videos))
+                }
+                if page_token:
+                    params["pageToken"] = page_token
+                
+                playlist_items = await _yt_get(client, "playlistItems", params)
+                
+                video_ids = [item["snippet"]["resourceId"]["videoId"] 
+                           for item in playlist_items.get("items", [])]
+                
+                if video_ids:
+                    # Get detailed video information
+                    videos_data = await _yt_get(client, "videos", {
+                        "part": "snippet,statistics,contentDetails",
+                        "id": ",".join(video_ids)
+                    })
+                    
+                    for video in videos_data.get("items", []):
+                        videos.append(_pack_video(video))
+                
+                page_token = playlist_items.get("nextPageToken")
+                if not page_token or len(videos) >= max_videos:
+                    break
+            
+            # Pack playlist details
+            result = {
+                "playlistId": playlist_id,
+                "title": playlist_info["snippet"]["title"],
+                "description": playlist_info["snippet"]["description"],
+                "channelTitle": playlist_info["snippet"]["channelTitle"],
+                "channelId": playlist_info["snippet"]["channelId"],
+                "publishedAt": playlist_info["snippet"]["publishedAt"],
+                "privacyStatus": playlist_info["status"]["privacyStatus"],
+                "thumbnails": playlist_info["snippet"]["thumbnails"],
+                "videoCount": playlist_info["contentDetails"]["itemCount"],
+                "videos": videos,
+                "total_videos_returned": len(videos)
+            }
+            
+            logger.info(f"Successfully fetched playlist details with {len(videos)} videos")
+            
+            return json.dumps(result, ensure_ascii=False)
+            
+    except Exception as e:
+        logger.error(f"Error: {e}", exc_info=True)
+        return f"ERROR: {type(e).__name__}: {e}"
+
+@mcp.tool()
+async def search_playlists(query: str, max: int = 50, order: str = "relevance") -> str:
+    """
+    Search for YouTube playlists by name/query.
+    Args:
+      query: Search query (e.g., "bollywood hits", "punjabi songs playlist")
+      max: Max results to return (1-50)
+      order: Sort order - "relevance" (default), "date" (newest), "viewCount" (most viewed), "rating" (highest rated)
+    """
+    logger.info(f"search_playlists called - Query: {query}, max: {max}, order: {order}")
+    
+    try:
+        _get_yt_api_key()
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Search for playlists
+            search_data = await _yt_get(client, "search", {
+                "part": "snippet",
+                "q": query,
+                "type": "playlist",
+                "maxResults": max,
+                "order": order
+            })
+            
+            playlists = []
+            playlist_ids = [item["id"]["playlistId"] for item in search_data.get("items", [])]
+            
+            if playlist_ids:
+                # Get detailed playlist information
+                playlist_data = await _yt_get(client, "playlists", {
+                    "part": "snippet,contentDetails,status",
+                    "id": ",".join(playlist_ids)
+                })
+                
+                for playlist in playlist_data.get("items", []):
+                    playlists.append({
+                        "playlistId": playlist["id"],
+                        "title": playlist["snippet"]["title"],
+                        "description": playlist["snippet"]["description"][:200],
+                        "channelTitle": playlist["snippet"]["channelTitle"],
+                        "channelId": playlist["snippet"]["channelId"],
+                        "thumbnails": playlist["snippet"]["thumbnails"],
+                        "videoCount": playlist["contentDetails"]["itemCount"],
+                        "publishedAt": playlist["snippet"]["publishedAt"],
+                        "privacyStatus": playlist["status"]["privacyStatus"],
+                        "url": f"https://www.youtube.com/playlist?list={playlist['id']}"
+                    })
+            
+            logger.info(f"Successfully found {len(playlists)} playlists matching query")
+            
+            return json.dumps({
+                "query": query,
+                "order": order,
+                "total_returned": len(playlists),
+                "playlists": playlists
+            }, ensure_ascii=False)
             
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
